@@ -193,25 +193,51 @@ void loop() {
     motorBackLeft.step(10);
   }
 }
-```
+// ```
 
-## **Calibration Guide:**
+// ## **Calibration Guide:**
 
-### **1. Steps Per Centimeter (`stepsPerCm`):**
-```
-stepsPerCm = stepsPerRevolution / (π * wheelDiameter)
-```
-For 6cm diameter wheels:
-```
-stepsPerCm = 2048 / (3.14159 * 6) ≈ 108.5 steps/cm
-```
+// ### **1. Steps Per Centimeter (`stepsPerCm`):**
+// ```
+// stepsPerCm = stepsPerRevolution / (π * wheelDiameter)
+// ```
+// For 6cm diameter wheels:
+// ```
+// stepsPerCm = 2048 / (3.14159 * 6) ≈ 108.5 steps/cm
+// ```
 
-**Calibration test:** 
-- Command the robot to move a known distance (e.g., 100cm)
-- Measure actual distance traveled
-- Adjust: `stepsPerCm = (stepsPerCm * commanded_distance) / actual_distance`
+// **Calibration test:** 
+// - Command the robot to move a known distance (e.g., 100cm)
+// - Measure actual distance traveled
+// - Adjust: `stepsPerCm = (stepsPerCm * commanded_distance) / actual_distance`
 
-### **2. Steps Per Degree (`stepsPerDegree`):**
-For rotation, you need to account for the robot's wheelbase. The approximate formula:
-```
-stepsPerDegree = (stepsPerRevolution * robotWidth) / (360 * wheelDiameter)
+// ### **2. Steps Per Degree (`stepsPerDegree`):**
+// For rotation, you need to account for the robot's wheelbase. The approximate formula:
+// ```
+// stepsPerDegree = (stepsPerRevolution * robotWidth) / (360 * wheelDiameter)
+
+// But calibration is critical here because:
+
+// Mecanum wheels slip during rotation
+// Floor surface affects grip
+// Weight distribution matters
+
+// Calibration test:
+
+// Command 360° rotation
+// Count actual rotations
+// Adjust accordingly
+
+// Notes:
+
+// Motor direction conventions - I assumed standard mecanum layout. If your motors spin the wrong way, add negative signs to specific motor step commands.
+// The ADC check happens every loop - motors won't move if threshold is exceeded.
+// I kept your continuous running mode in the loop. You'll probably want to replace this with actual movement commands once calibrated.
+// Mecanum wheel directions depend on roller orientation. My functions assume:
+
+// Front-left and back-right rollers angle one way
+// Front-right and back-left angle the other way
+
+// If your strafing goes diagonal, you need to swap some motor directions.
+
+// Do you want me to add a command parser so you can test movements via serial commands like "f10" for forward 10cm?
