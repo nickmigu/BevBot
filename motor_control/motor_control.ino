@@ -1,41 +1,41 @@
 #include <Stepper.h>
 
-// ===== STEPPER MOTOR PIN DEFINITIONS =====
+// ===== STEPPER MOTOR PIN DEFINITIONS ===== jacques edited
 // Front Right Motor (Motor 1)
-#define FRONT_RIGHT_1  4
-#define FRONT_RIGHT_2  17
-#define FRONT_RIGHT_3  16
-#define FRONT_RIGHT_4  5
+#define FRONT_RIGHT_1  34
+#define FRONT_RIGHT_2  35
+#define FRONT_RIGHT_3  36
+#define FRONT_RIGHT_4  37
 
 // Front Left Motor (Motor 2)
-#define FRONT_LEFT_1   18
-#define FRONT_LEFT_2   19
-#define FRONT_LEFT_3   21
-#define FRONT_LEFT_4   22
+#define FRONT_LEFT_1   10
+#define FRONT_LEFT_2   9
+#define FRONT_LEFT_3   8
+#define FRONT_LEFT_4   7
 
 // Back Right Motor (Motor 3)
-#define BACK_RIGHT_1   23
-#define BACK_RIGHT_2   25
-#define BACK_RIGHT_3   26
-#define BACK_RIGHT_4   27
+#define BACK_RIGHT_1   20
+#define BACK_RIGHT_2   21
+#define BACK_RIGHT_3   22
+#define BACK_RIGHT_4   23
 
 // Back Left Motor (Motor 4)
-#define BACK_LEFT_1    12
-#define BACK_LEFT_2    13
-#define BACK_LEFT_3    14
+#define BACK_LEFT_1    18
+#define BACK_LEFT_2    17
+#define BACK_LEFT_3    16
 #define BACK_LEFT_4    15
 
 // ===== CALIBRATION CONSTANTS =====
 // TODO: Calibrate these values for your specific setup
 const int stepsPerRevolution = 2048;
-float stepsPerCm = 2048.0;           // Steps needed to move 1cm - CALIBRATE THIS
-float stepsPerDegree = 11.38;        // Steps per motor to rotate robot 1 degree - CALIBRATE THIS
+float stepsPerCm = 81.48733;           // Steps needed to move 1cm - jacques cal'd
+float stepsPerDegree = 17.77778;        // Steps per motor to rotate robot 1 degree - jacques cal'd
 
 // Wheel diameter and robot dimensions (for reference/calculation)
 // You'll use these to calculate the above constants
-const float wheelDiameter = 6.0;     // cm - measure your wheel diameter
-const float robotWidth = 20.0;       // cm - distance between left and right wheels
-const float robotLength = 20.0;      // cm - distance between front and back wheels
+const float wheelDiameter = 8.0;     // cm - measure your wheel diameter
+const float robotWidth = 25.0;       // cm - distance between left and right wheels   jacques measured wheeltrack
+const float robotLength = 16.0;      // cm - distance between front and back wheels   jacques measured wheelbase
 
 // ===== STEPPER MOTOR INSTANCES =====
 // Pins entered in sequence IN1-IN3-IN2-IN4 for proper step sequence
@@ -88,8 +88,8 @@ void rotate(float thetaDegrees) {
   if (motorRunning) {
     // For rotation: left and right sides turn opposite directions
     motorFrontRight.step(steps);
-    motorFrontLeft.step(-steps);
-    motorBackRight.step(steps);
+    motorFrontLeft.step(steps);
+    motorBackRight.step(-steps);
     motorBackLeft.step(-steps);
   }
 }
