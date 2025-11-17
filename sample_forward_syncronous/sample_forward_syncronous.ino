@@ -39,6 +39,7 @@ const float robotLength = 16.0;    // cm - wheelbase
 #define DEFAULT_SPEED 400
 #define MAX_SPEED     500
 
+
 // ===== ACCELSTEPPER MOTOR INSTANCES =====
 // Pin sequence: IN1-IN3-IN2-IN4 for proper 28BYJ-48 step sequence
 AccelStepper motorFrontRight(AccelStepper::FULL4WIRE, FRONT_RIGHT_1, FRONT_RIGHT_3, FRONT_RIGHT_2, FRONT_RIGHT_4);

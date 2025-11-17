@@ -9,32 +9,35 @@ WiFiServer server(80);
 String header;
 
 // -------------------------- STEPPER CONFIG --------------------------
-// Front Right Motor
+// ===== STEPPER MOTOR PIN DEFINITIONS =====
+// Front Right Motor (Motor 1)
 #define FRONT_RIGHT_1  17
 #define FRONT_RIGHT_2  5
 #define FRONT_RIGHT_3  18
 #define FRONT_RIGHT_4  19
 
-// Front Left Motor
+// Front Left Motor (Motor 2)
 #define FRONT_LEFT_1   26
 #define FRONT_LEFT_2   25
 #define FRONT_LEFT_3   33
 #define FRONT_LEFT_4   32
 
-// Back Right Motor
+// Back Right Motor (Motor 3)
 #define BACK_RIGHT_1   15
 #define BACK_RIGHT_2   2
 #define BACK_RIGHT_3   4
 #define BACK_RIGHT_4   16
 
-// Back Left Motor
-#define BACK_LEFT_1    27
-#define BACK_LEFT_2    21
-#define BACK_LEFT_3    22
-#define BACK_LEFT_4    23
+// Back Left Motor (Motor 4)
+#define BACK_LEFT_1    13
+#define BACK_LEFT_2    12
+#define BACK_LEFT_3    14
+#define BACK_LEFT_4    27
 
 #define DEFAULT_SPEED 400
 #define MAX_SPEED     500
+#define TURN_SPEED    600    // Speed for turning operations
+#define TURN_ACCEL    2000    // Acceleration for turning operations
 
 // Create motors - AccelStepper(IN1, IN3, IN2, IN4)
 AccelStepper motorFR(AccelStepper::FULL4WIRE, FRONT_RIGHT_1, FRONT_RIGHT_3, FRONT_RIGHT_2, FRONT_RIGHT_4);
@@ -48,8 +51,14 @@ const int voltageThreshold = 800;
 bool motorRunning = true;
 
 // ------------------------- CALIBRATION -------------------------
+const int stepsPerRevolution = 2048;
 float stepsPerCm = 81.48733;
+float stepsPerDegree = 17.77778;  // Steps per motor to rotate robot 1 degree - jacques cal'd
 
+// Wheel diameter and robot dimensions (for reference)
+const float wheelDiameter = 8.0;   // cm
+const float robotWidth = 25.0;     // cm - wheeltrack
+const float robotLength = 16.0;    // cm - wheelbase
 // ------------------------- PARAM PARSER -------------------------
 String getValue(String data, String key) {
   int start = data.indexOf(key);
@@ -59,6 +68,45 @@ String getValue(String data, String key) {
   if (end == -1) end = data.indexOf(" ", start);
   return data.substring(start, end);
 }
+
+// -------------------------  TURN TURNER -------------------------
+
+void turnDegrees(float degrees) {
+  motorFrontRight.setMaxSpeed(TURN_SPEED);
+  motorFrontLeft.setMaxSpeed(TURN_SPEED);
+  motorBackRight.setMaxSpeed(TURN_SPEED);
+  motorBackLeft.setMaxSpeed(TURN_SPEED);
+  
+  motorFrontRight.setAcceleration(TURN_ACCEL);
+  motorFrontLeft.setAcceleration(TURN_ACCEL);
+  motorBackRight.setAcceleration(TURN_ACCEL);
+  motorBackLeft.setAcceleration(TURN_ACCEL);
+
+  long steps = (long)(abs(degrees) * stepsPerDegree);
+  
+  if (degrees > 0) {
+    motorFrontLeft.move(steps);
+    motorBackLeft.move(steps);
+    motorFrontRight.move(-steps);
+    motorBackRight.move(-steps);
+  } else {
+    motorFrontRight.move(steps);
+    motorBackRight.move(steps);
+    motorFrontLeft.move(-steps);
+    motorBackLeft.move(-steps);
+  }
+  
+  while (motorFrontRight.distanceToGo() != 0 || 
+         motorFrontLeft.distanceToGo() != 0 ||
+         motorBackRight.distanceToGo() != 0 || 
+         motorBackLeft.distanceToGo() != 0) {
+    motorFrontRight.run();
+    motorFrontLeft.run();
+    motorBackRight.run();
+    motorBackLeft.run();
+  }
+
+
 
 // ------------------------- MOVEMENT HELPERS -------------------------
 void runAllToTarget() {
