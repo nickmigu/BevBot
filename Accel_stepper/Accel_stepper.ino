@@ -1,24 +1,33 @@
+#include <WiFi.h>
 #include <AccelStepper.h>
 
-// Front Right Motor (Motor 1)
+// ------------------------- WIFI CONFIG -------------------------
+const char* ssid = "FBI Surveillance Van";
+const char* password = "Idonotknow!!!";
+
+WiFiServer server(80);
+String header;
+
+// -------------------------- STEPPER CONFIG --------------------------
+// Front Right Motor
 #define FRONT_RIGHT_1  17
 #define FRONT_RIGHT_2  5
 #define FRONT_RIGHT_3  18
 #define FRONT_RIGHT_4  19
 
-// Front Left Motor (Motor 2)
+// Front Left Motor
 #define FRONT_LEFT_1   26
 #define FRONT_LEFT_2   25
 #define FRONT_LEFT_3   33
 #define FRONT_LEFT_4   32
 
-// Back Right Motor (Motor 3)
+// Back Right Motor
 #define BACK_RIGHT_1   15
 #define BACK_RIGHT_2   2
 #define BACK_RIGHT_3   4
 #define BACK_RIGHT_4   16
 
-// Back Left Motor (Motor 4)
+// Back Left Motor
 #define BACK_LEFT_1    27
 #define BACK_LEFT_2    21
 #define BACK_LEFT_3    22
@@ -27,52 +36,179 @@
 #define DEFAULT_SPEED 400
 #define MAX_SPEED     500
 
-// ADC configuration
+// Create motors - AccelStepper(IN1, IN3, IN2, IN4)
+AccelStepper motorFR(AccelStepper::FULL4WIRE, FRONT_RIGHT_1, FRONT_RIGHT_3, FRONT_RIGHT_2, FRONT_RIGHT_4);
+AccelStepper motorFL(AccelStepper::FULL4WIRE, FRONT_LEFT_1, FRONT_LEFT_3, FRONT_LEFT_2, FRONT_LEFT_4);
+AccelStepper motorBR(AccelStepper::FULL4WIRE, BACK_RIGHT_1, BACK_RIGHT_3, BACK_RIGHT_2, BACK_RIGHT_4);
+AccelStepper motorBL(AccelStepper::FULL4WIRE, BACK_LEFT_1, BACK_LEFT_3, BACK_LEFT_2, BACK_LEFT_4);
+
+// ------------------------- ADC -------------------------
 const int adcPin = 34;
 const int voltageThreshold = 800;
-
-// Create motor instances - pin sequence: IN1-IN3-IN2-IN4
-AccelStepper motorFrontRight(AccelStepper::FULL4WIRE, FRONT_RIGHT_1, FRONT_RIGHT_3, FRONT_RIGHT_2, FRONT_RIGHT_4);
-AccelStepper motorFrontLeft(AccelStepper::FULL4WIRE, FRONT_LEFT_1, FRONT_LEFT_3, FRONT_LEFT_2, FRONT_LEFT_4);
-AccelStepper motorBackRight(AccelStepper::FULL4WIRE, BACK_RIGHT_1, BACK_RIGHT_3, BACK_RIGHT_2, BACK_RIGHT_4);
-AccelStepper motorBackLeft(AccelStepper::FULL4WIRE, BACK_LEFT_1, BACK_LEFT_3, BACK_LEFT_2, BACK_LEFT_4);
-
 bool motorRunning = true;
 
-void setup() {
-  Serial.begin(9600);
-  pinMode(adcPin, INPUT);
-  
-  // Set max speed AND speed for continuous rotation
-  motorFrontRight.setMaxSpeed(MAX_SPEED);
-  motorFrontRight.setSpeed(DEFAULT_SPEED);
-  
-  motorFrontLeft.setMaxSpeed(MAX_SPEED);
-  motorFrontLeft.setSpeed(DEFAULT_SPEED);
-  
-  motorBackRight.setMaxSpeed(MAX_SPEED);
-  motorBackRight.setSpeed(DEFAULT_SPEED);
-  
-  motorBackLeft.setMaxSpeed(MAX_SPEED);
-  motorBackLeft.setSpeed(DEFAULT_SPEED);
-  
-  Serial.println("Moving forward...");
+// ------------------------- CALIBRATION -------------------------
+float stepsPerCm = 81.48733;
+
+// ------------------------- PARAM PARSER -------------------------
+String getValue(String data, String key) {
+  int start = data.indexOf(key);
+  if (start == -1) return "";
+  start += key.length();
+  int end = data.indexOf("&", start);
+  if (end == -1) end = data.indexOf(" ", start);
+  return data.substring(start, end);
 }
 
+// ------------------------- MOVEMENT HELPERS -------------------------
+void runAllToTarget() {
+  while (motorFR.isRunning() || motorFL.isRunning() ||
+         motorBR.isRunning() || motorBL.isRunning()) {
+
+    if (!motorRunning) return;
+
+    motorFR.run();
+    motorFL.run();
+    motorBR.run();
+    motorBL.run();
+  }
+}
+
+void moveLinear(float cm) {
+  if (!motorRunning) return;
+  int steps = cm * stepsPerCm;
+
+  motorFR.move(steps);
+  motorFL.move(steps);
+  motorBR.move(steps);
+  motorBL.move(steps);
+
+  runAllToTarget();
+}
+
+void moveStrafe(float cm) {
+  if (!motorRunning) return;
+  int steps = cm * stepsPerCm;
+
+  motorFR.move( steps);
+  motorFL.move(-steps);
+  motorBR.move(-steps);
+  motorBL.move( steps);
+
+  runAllToTarget();
+}
+
+// ------------------------- SETUP -------------------------
+void setup() {
+  Serial.begin(115200);
+  pinMode(adcPin, INPUT);
+
+  motorFR.setMaxSpeed(MAX_SPEED);
+  motorFL.setMaxSpeed(MAX_SPEED);
+  motorBR.setMaxSpeed(MAX_SPEED);
+  motorBL.setMaxSpeed(MAX_SPEED);
+
+  motorFR.setSpeed(DEFAULT_SPEED);
+  motorFL.setSpeed(DEFAULT_SPEED);
+  motorBR.setSpeed(DEFAULT_SPEED);
+  motorBL.setSpeed(DEFAULT_SPEED);
+
+  // Connect WiFi
+  Serial.println("Connecting to WiFi…");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(300);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected!");
+  Serial.println(WiFi.localIP());
+
+  server.begin();
+}
+
+// ------------------------- LOOP -------------------------
 void loop() {
-  // Check ADC
+
+  // Check ADC cutoff
   int adcValue = analogRead(adcPin);
-  if (adcValue >= voltageThreshold) {
-    motorRunning = false;
-  } else {
-    motorRunning = true;
+  motorRunning = adcValue < voltageThreshold;
+
+  WiFiClient client = server.available();
+  if (!client) return;
+
+  header = "";
+  String currentLine = "";
+
+  while (client.connected()) {
+    if (!client.available()) continue;
+
+    char c = client.read();
+    header += c;
+
+    if (c != '\n') continue;
+
+    if (currentLine.length() == 0) {
+
+      // ===== LINEAR =====
+      if (header.indexOf("GET /linear") >= 0) {
+        String dir  = getValue(header, "dir=");
+        int dist    = getValue(header, "dist=").toInt();
+
+        float cm = (dir == "forward") ? dist : -dist;
+
+        Serial.println("=== LINEAR MOVE ===");
+        Serial.println(dir + " " + String(dist) + "cm");
+
+        moveLinear(cm);
+      }
+
+      // ===== STRAFE =====
+      if (header.indexOf("GET /strafe") >= 0) {
+        String dir  = getValue(header, "dir=");
+        int dist    = getValue(header, "dist=").toInt();
+
+        float cm = (dir == "right") ? dist : -dist;
+
+        Serial.println("=== STRAFE MOVE ===");
+        Serial.println(dir + " " + String(dist) + "cm");
+
+        moveStrafe(cm);
+      }
+
+      // ===== SEND WEBPAGE =====
+      client.println("HTTP/1.1 200 OK");
+      client.println("Content-type:text/html\n");
+
+      client.println("<html><body style='font-family:Arial;text-align:center;'>");
+      client.println("<h1>Mecanum Robot Control</h1><hr>");
+
+      // Linear form
+      client.println("<h2>Linear Move</h2>");
+      client.println("<form action='/linear'>"
+                     "<select name='dir'>"
+                     "<option value='forward'>Forward</option>"
+                     "<option value='backward'>Backward</option>"
+                     "</select><br><br>"
+                     "Distance (cm): <input name='dist' type='number'><br><br>"
+                     "<button type='submit'>MOVE</button></form><hr>");
+
+      // Strafe form
+      client.println("<h2>Strafe Move</h2>");
+      client.println("<form action='/strafe'>"
+                     "<select name='dir'>"
+                     "<option value='right'>Right</option>"
+                     "<option value='left'>Left</option>"
+                     "</select><br><br>"
+                     "Distance (cm): <input name='dist' type='number'><br><br>"
+                     "<button type='submit'>STRAFE</button></form>");
+
+      client.println("</body></html>");
+      break;
+    }
+
+    currentLine = "";
   }
-  
-  // Move all motors forward concurrently
-  if (motorRunning) {
-    motorFrontRight.runSpeed();
-    motorFrontLeft.runSpeed();
-    motorBackRight.runSpeed();
-    motorBackLeft.runSpeed();
-  }
+
+  client.stop();
+  Serial.println("Client disconnected.\n");
 }
