@@ -9,26 +9,25 @@ WiFiServer server(80);
 String header;
 
 // -------------------------- STEPPER CONFIG --------------------------
-// ===== STEPPER MOTOR PIN DEFINITIONS =====
-// Front Right Motor (Motor 1)
+// Front Right Motor
 #define FRONT_RIGHT_1  17
 #define FRONT_RIGHT_2  5
 #define FRONT_RIGHT_3  18
 #define FRONT_RIGHT_4  19
 
-// Front Left Motor (Motor 2)
+// Front Left Motor
 #define FRONT_LEFT_1   26
 #define FRONT_LEFT_2   25
 #define FRONT_LEFT_3   33
 #define FRONT_LEFT_4   32
 
-// Back Right Motor (Motor 3)
+// Back Right Motor
 #define BACK_RIGHT_1   15
 #define BACK_RIGHT_2   2
 #define BACK_RIGHT_3   4
 #define BACK_RIGHT_4   16
 
-// Back Left Motor (Motor 4)
+// Back Left Motor
 #define BACK_LEFT_1    13
 #define BACK_LEFT_2    12
 #define BACK_LEFT_3    14
@@ -39,6 +38,10 @@ String header;
 #define TURN_SPEED    600    // Speed for turning operations
 #define TURN_ACCEL    2000    // Acceleration for turning operations
 
+#define PUMP_PIN 13
+
+#define PUMP_DELAY 1000
+
 // Create motors - AccelStepper(IN1, IN3, IN2, IN4)
 AccelStepper motorFR(AccelStepper::FULL4WIRE, FRONT_RIGHT_1, FRONT_RIGHT_3, FRONT_RIGHT_2, FRONT_RIGHT_4);
 AccelStepper motorFL(AccelStepper::FULL4WIRE, FRONT_LEFT_1, FRONT_LEFT_3, FRONT_LEFT_2, FRONT_LEFT_4);
@@ -47,7 +50,7 @@ AccelStepper motorBL(AccelStepper::FULL4WIRE, BACK_LEFT_1, BACK_LEFT_3, BACK_LEF
 
 // ------------------------- ADC -------------------------
 const int adcPin = 34;
-const int voltageThreshold = 800;
+const int voltageThreshold = 600;
 bool motorRunning = true;
 
 // ------------------------- CALIBRATION -------------------------
@@ -59,6 +62,10 @@ float stepsPerDegree = 17.77778;  // Steps per motor to rotate robot 1 degree - 
 const float wheelDiameter = 8.0;   // cm
 const float robotWidth = 25.0;     // cm - wheeltrack
 const float robotLength = 16.0;    // cm - wheelbase
+
+// ------------------------- TIMING -------------------------
+unsigned long pumpMillis = 0;
+
 // ------------------------- PARAM PARSER -------------------------
 String getValue(String data, String key) {
   int start = data.indexOf(key);
@@ -72,41 +79,40 @@ String getValue(String data, String key) {
 // -------------------------  TURN TURNER -------------------------
 
 void turnDegrees(float degrees) {
-  motorFrontRight.setMaxSpeed(TURN_SPEED);
-  motorFrontLeft.setMaxSpeed(TURN_SPEED);
-  motorBackRight.setMaxSpeed(TURN_SPEED);
-  motorBackLeft.setMaxSpeed(TURN_SPEED);
+  motorFR.setMaxSpeed(TURN_SPEED);
+  motorFL.setMaxSpeed(TURN_SPEED);
+  motorBR.setMaxSpeed(TURN_SPEED);
+  motorBL.setMaxSpeed(TURN_SPEED);
   
-  motorFrontRight.setAcceleration(TURN_ACCEL);
-  motorFrontLeft.setAcceleration(TURN_ACCEL);
-  motorBackRight.setAcceleration(TURN_ACCEL);
-  motorBackLeft.setAcceleration(TURN_ACCEL);
+  motorFR.setAcceleration(TURN_ACCEL);
+  motorFL.setAcceleration(TURN_ACCEL);
+  motorBR.setAcceleration(TURN_ACCEL);
+  motorBL.setAcceleration(TURN_ACCEL);
 
   long steps = (long)(abs(degrees) * stepsPerDegree);
   
   if (degrees > 0) {
-    motorFrontLeft.move(steps);
-    motorBackLeft.move(steps);
-    motorFrontRight.move(-steps);
-    motorBackRight.move(-steps);
+    motorFL.move(steps);
+    motorBL.move(steps);
+    motorFR.move(-steps);
+    motorBR.move(-steps);
   } else {
-    motorFrontRight.move(steps);
-    motorBackRight.move(steps);
-    motorFrontLeft.move(-steps);
-    motorBackLeft.move(-steps);
+    motorFR.move(steps);
+    motorBR.move(steps);
+    motorFL.move(-steps);
+    motorBL.move(-steps);
   }
   
-  while (motorFrontRight.distanceToGo() != 0 || 
-         motorFrontLeft.distanceToGo() != 0 ||
-         motorBackRight.distanceToGo() != 0 || 
-         motorBackLeft.distanceToGo() != 0) {
-    motorFrontRight.run();
-    motorFrontLeft.run();
-    motorBackRight.run();
-    motorBackLeft.run();
+  while (motorFR.distanceToGo() != 0 || 
+         motorFL.distanceToGo() != 0 ||
+         motorBR.distanceToGo() != 0 || 
+         motorBL.distanceToGo() != 0) {
+    motorFR.run();
+    motorFL.run();
+    motorBR.run();
+    motorBL.run();
   }
-
-
+}
 
 // ------------------------- MOVEMENT HELPERS -------------------------
 void runAllToTarget() {
@@ -150,6 +156,7 @@ void moveStrafe(float cm) {
 void setup() {
   Serial.begin(115200);
   pinMode(adcPin, INPUT);
+  pinMode(PUMP_PIN, INPUT);
 
   motorFR.setMaxSpeed(MAX_SPEED);
   motorFL.setMaxSpeed(MAX_SPEED);
@@ -199,28 +206,42 @@ void loop() {
 
       // ===== LINEAR =====
       if (header.indexOf("GET /linear") >= 0) {
-        String dir  = getValue(header, "dir=");
         int dist    = getValue(header, "dist=").toInt();
 
-        float cm = (dir == "forward") ? dist : -dist;
+        float cm = dist;
 
         Serial.println("=== LINEAR MOVE ===");
-        Serial.println(dir + " " + String(dist) + "cm");
+        Serial.println("Straight " + String(dist) + "cm");
 
         moveLinear(cm);
       }
 
-      // ===== STRAFE =====
-      if (header.indexOf("GET /strafe") >= 0) {
-        String dir  = getValue(header, "dir=");
+      if (header.indexOf("GET /rotate") >= 0) {
         int dist    = getValue(header, "dist=").toInt();
 
-        float cm = (dir == "right") ? dist : -dist;
+        float cm = dist;
 
-        Serial.println("=== STRAFE MOVE ===");
-        Serial.println(dir + " " + String(dist) + "cm");
+        Serial.println("=== LINEAR MOVE ===");
+        Serial.println("Straight " + String(dist) + "cm");
 
-        moveStrafe(cm);
+        turnDegrees(cm);
+      }
+
+      if (header.indexOf("GET /pump") >= 0) {
+        int dist    = getValue(header, "dist=").toInt();
+
+        float cm = dist;
+
+        Serial.println("=== LINEAR MOVE ===");
+        Serial.println("Rotate " + String(dist) + "cm");
+
+        // set high and set current millis, reset elsewhere
+        pumpMillis = millis();
+        digitalWrite(PUMP_PIN, HIGH);
+      }
+
+      if(millis() - pumpMillis >= PUMP_DELAY) {
+        digitalWrite(PUMP_PIN, LOW);
       }
 
       // ===== SEND WEBPAGE =====
@@ -233,28 +254,29 @@ void loop() {
       // Linear form
       client.println("<h2>Linear Move</h2>");
       client.println("<form action='/linear'>"
-                     "<select name='dir'>"
-                     "<option value='forward'>Forward</option>"
-                     "<option value='backward'>Backward</option>"
-                     "</select><br><br>"
                      "Distance (cm): <input name='dist' type='number'><br><br>"
                      "<button type='submit'>MOVE</button></form><hr>");
 
-      // Strafe form
-      client.println("<h2>Strafe Move</h2>");
-      client.println("<form action='/strafe'>"
-                     "<select name='dir'>"
-                     "<option value='right'>Right</option>"
-                     "<option value='left'>Left</option>"
-                     "</select><br><br>"
-                     "Distance (cm): <input name='dist' type='number'><br><br>"
-                     "<button type='submit'>STRAFE</button></form>");
+      // Rotation form
+      client.println("<h2>Rotate</h2>");
+      client.println("<form action='/rotate'>"
+                     "Degrees: <input name='deg' type='number'><br><br>"
+                     "<button type='submit'>ROTATE</button></form>");
 
+      // Pump button
+      client.println("<h2>Pump</h2>");
+      client.println("<form action='/pump'>"
+                     "<button type='submit'>PUMP N DUMP</button></form>");
       client.println("</body></html>");
       break;
     }
 
     currentLine = "";
+  }
+
+  // if client disconnects, continue to handle pump
+  if(millis() - pumpMillis >= PUMP_DELAY) {
+    digitalWrite(PUMP_PIN, LOW);
   }
 
   client.stop();
