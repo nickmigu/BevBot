@@ -9,34 +9,35 @@ WiFiServer server(80);
 String header;
 
 // -------------------------- STEPPER CONFIG --------------------------
-// Front Right Motor
+// Front Right Motor (Motor 1)
 #define FRONT_RIGHT_1  17
 #define FRONT_RIGHT_2  5
 #define FRONT_RIGHT_3  18
 #define FRONT_RIGHT_4  19
 
-// Front Left Motor
+// Front Left Motor (Motor 2)
 #define FRONT_LEFT_1   26
 #define FRONT_LEFT_2   25
 #define FRONT_LEFT_3   33
 #define FRONT_LEFT_4   32
 
-// Back Right Motor
+// Back Right Motor (Motor 3)
 #define BACK_RIGHT_1   15
 #define BACK_RIGHT_2   2
 #define BACK_RIGHT_3   4
 #define BACK_RIGHT_4   16
 
-// Back Left Motor
-#define BACK_LEFT_1    13
-#define BACK_LEFT_2    12
-#define BACK_LEFT_3    14
-#define BACK_LEFT_4    27
+// Back Left Motor (Motor 4)
+#define BACK_LEFT_1    27
+#define BACK_LEFT_2    21
+#define BACK_LEFT_3    22
+#define BACK_LEFT_4    23
 
 #define DEFAULT_SPEED 400
 #define MAX_SPEED     500
 #define TURN_SPEED    600    // Speed for turning operations
 #define TURN_ACCEL    2000    // Acceleration for turning operations
+#define STRAIGHT_ACCEL 1000
 
 #define PUMP_PIN 13
 
@@ -167,6 +168,11 @@ void setup() {
   motorFL.setSpeed(DEFAULT_SPEED);
   motorBR.setSpeed(DEFAULT_SPEED);
   motorBL.setSpeed(DEFAULT_SPEED);
+
+  motorFR.setAcceleration(STRAIGHT_ACCEL);
+  motorFL.setAcceleration(STRAIGHT_ACCEL);
+  motorBR.setAcceleration(STRAIGHT_ACCEL);
+  motorBL.setAcceleration(STRAIGHT_ACCEL);
 
   // Connect WiFi
   Serial.println("Connecting to WiFi…");
