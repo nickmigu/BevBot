@@ -9,25 +9,25 @@ WiFiServer server(80);
 String header;
 
 // -------------------------- STEPPER CONFIG --------------------------
-// Front Right Motor (Motor 1)
+// Front Right Motor
 #define FRONT_RIGHT_1  17
 #define FRONT_RIGHT_2  5
 #define FRONT_RIGHT_3  18
 #define FRONT_RIGHT_4  19
 
-// Front Left Motor (Motor 2)
+// Front Left Motor
 #define FRONT_LEFT_1   26
 #define FRONT_LEFT_2   25
 #define FRONT_LEFT_3   33
 #define FRONT_LEFT_4   32
 
-// Back Right Motor (Motor 3)
+// Back Right Motor
 #define BACK_RIGHT_1   15
 #define BACK_RIGHT_2   2
 #define BACK_RIGHT_3   4
 #define BACK_RIGHT_4   16
 
-// Back Left Motor (Motor 4)
+// Back Left Motor
 #define BACK_LEFT_1    27
 #define BACK_LEFT_2    21
 #define BACK_LEFT_3    22
@@ -37,11 +37,11 @@ String header;
 #define MAX_SPEED     500
 #define TURN_SPEED    600    // Speed for turning operations
 #define TURN_ACCEL    2000    // Acceleration for turning operations
-#define STRAIGHT_ACCEL 1000
 
 #define PUMP_PIN 13
 
 #define PUMP_DELAY 1000
+#define ROUTINE_DELAY 10000
 
 // Create motors - AccelStepper(IN1, IN3, IN2, IN4)
 AccelStepper motorFR(AccelStepper::FULL4WIRE, FRONT_RIGHT_1, FRONT_RIGHT_3, FRONT_RIGHT_2, FRONT_RIGHT_4);
@@ -66,6 +66,11 @@ const float robotLength = 16.0;    // cm - wheelbase
 
 // ------------------------- TIMING -------------------------
 unsigned long pumpMillis = 0;
+unsigned long automatedMillis = 0;
+
+// --------------- PENDING MOVEMENTS-------------------------
+int pendingLinear = 0;
+int pendingRotate = 0;
 
 // ------------------------- PARAM PARSER -------------------------
 String getValue(String data, String key) {
@@ -153,6 +158,60 @@ void moveStrafe(float cm) {
   runAllToTarget();
 }
 
+void sendResponse(WiFiClient client) {
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-type:text/html");
+  client.println("Connection: close");
+  client.println();
+  client.println("<html><body><h1>Command received</h1></body></html>");
+  client.flush();     // <-- MAKE SURE IT LEAVES
+  delay(20);          // <-- Give time to send before blocking
+}
+
+void handleWebsiteRequest(int dist, int deg) {
+  if (header.indexOf("GET /linear") >= 0) {
+    Serial.println("=== LINEAR MOVE ===");
+    Serial.println("Straight " + String(dist) + "cm");
+    pendingLinear = dist;
+  }
+
+  if (header.indexOf("GET /rotate") >= 0) {
+    Serial.println("=== ROTATIONAL MOVE ===");
+    Serial.println("Rotating " + String(deg) + "degrees");
+    pendingRotate = deg;
+  }
+
+  if (header.indexOf("GET /pump") >= 0) {
+    Serial.println("=== PUMPer ===");
+    Serial.println("PUMPn for a sec");
+
+    // set high and set current millis, reset elsewhere
+    pumpMillis = millis();
+    digitalWrite(PUMP_PIN, HIGH);
+  } 
+}
+
+void printWebsiteInterface(WiFiClient client) {
+  client.println("<html><body>");
+  // Linear form
+  client.println("<h2>Linear Move</h2>");
+  client.println("<form action='/linear'>"
+                "Distance (cm): <input name='dist' type='number'><br><br>"
+                "<button type='submit'>MOVE</button></form><hr>");
+
+  // Rotation form
+  client.println("<h2>Rotate</h2>");
+  client.println("<form action='/rotate'>"
+                "Degrees: <input name='deg' type='number'><br><br>"
+                "<button type='submit'>ROTATE</button></form>");
+
+  // Pump button
+  client.println("<h2>Pump</h2>");
+  client.println("<form action='/pump'>"
+                "<button type='submit'>PUMP N DUMP</button></form>");
+  client.println("</body></html>");
+}
+
 // ------------------------- SETUP -------------------------
 void setup() {
   Serial.begin(115200);
@@ -169,11 +228,6 @@ void setup() {
   motorBR.setSpeed(DEFAULT_SPEED);
   motorBL.setSpeed(DEFAULT_SPEED);
 
-  motorFR.setAcceleration(STRAIGHT_ACCEL);
-  motorFL.setAcceleration(STRAIGHT_ACCEL);
-  motorBR.setAcceleration(STRAIGHT_ACCEL);
-  motorBL.setAcceleration(STRAIGHT_ACCEL);
-
   // Connect WiFi
   Serial.println("Connecting to WiFi…");
   WiFi.begin(ssid, password);
@@ -189,7 +243,6 @@ void setup() {
 
 // ------------------------- LOOP -------------------------
 void loop() {
-
   // Check ADC cutoff
   int adcValue = analogRead(adcPin);
   motorRunning = adcValue < voltageThreshold;
@@ -200,7 +253,15 @@ void loop() {
   header = "";
   String currentLine = "";
 
+  pendingLinear = 0;
+  pendingRotate = 0;
+
   while (client.connected()) {
+    motorRunning = adcValue < voltageThreshold;
+    if(motorRunning == false) {
+      automatedMillis = millis();
+    }
+
     if(millis() - pumpMillis >= PUMP_DELAY) {
       digitalWrite(PUMP_PIN, LOW);
     }
@@ -214,52 +275,13 @@ void loop() {
         int dist = getValue(header, "dist=").toInt();
         int deg  = getValue(header, "deg=").toInt();
 
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-type:text/html");
-        client.println("Connection: close");
-        client.println();
-        client.println("<html><body><h1>Command received</h1></body></html>");
-        client.flush();     // <-- MAKE SURE IT LEAVES
-        delay(20);          // <-- Give time to send before blocking
-
-        if (header.indexOf("GET /linear") >= 0) {
-          Serial.println("=== LINEAR MOVE ===");
-          Serial.println("Straight " + String(dist) + "cm");
-          moveLinear(dist);
-        }
-
-        if (header.indexOf("GET /rotate") >= 0) {
-          Serial.println("=== ROTATIONAL MOVE ===");
-          Serial.println("Rotating " + String(deg) + "degrees");
-          turnDegrees(deg);
-        }
-
-        if (header.indexOf("GET /pump") >= 0) {
-          Serial.println("=== PUMPer ===");
-          Serial.println("PUMPn for a sec");
-
-          // set high and set current millis, reset elsewhere
-          pumpMillis = millis();
-          digitalWrite(PUMP_PIN, HIGH);
-        } 
-
-        // Linear form
-        client.println("<h2>Linear Move</h2>");
-        client.println("<form action='/linear'>"
-                      "Distance (cm): <input name='dist' type='number'><br><br>"
-                      "<button type='submit'>MOVE</button></form><hr>");
-
-        // Rotation form
-        client.println("<h2>Rotate</h2>");
-        client.println("<form action='/rotate'>"
-                      "Degrees: <input name='deg' type='number'><br><br>"
-                      "<button type='submit'>ROTATE</button></form>");
-
-        // Pump button
-        client.println("<h2>Pump</h2>");
-        client.println("<form action='/pump'>"
-                      "<button type='submit'>PUMP N DUMP</button></form>");
-        client.println("</body></html>");
+        // if we've received something, send a response first
+        sendResponse(client);
+        // run motors according to the received response
+        handleWebsiteRequest(dist, deg);
+        // display website
+        printWebsiteInterface(client);
+        
         break;
       } else {
         currentLine = "";
@@ -269,6 +291,9 @@ void loop() {
     }
 
   }
+
+  moveLinear(pendingLinear);
+  turnDegrees(pendingRotate);
 
   // if client disconnects, continue to handle pump
   if(millis() - pumpMillis >= PUMP_DELAY) {
