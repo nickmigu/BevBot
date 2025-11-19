@@ -41,7 +41,9 @@ String header;
 
 #define PUMP_PIN 13
 
-#define PUMP_DELAY 1000
+#define PUMP_DELAY 12000
+
+#define BACKUP_DIST -20
 
 // Create motors - AccelStepper(IN1, IN3, IN2, IN4)
 AccelStepper motorFR(AccelStepper::FULL4WIRE, FRONT_RIGHT_1, FRONT_RIGHT_3, FRONT_RIGHT_2, FRONT_RIGHT_4);
@@ -51,8 +53,9 @@ AccelStepper motorBL(AccelStepper::FULL4WIRE, BACK_LEFT_1, BACK_LEFT_3, BACK_LEF
 
 // ------------------------- ADC -------------------------
 const int adcPin = 34;
-const int voltageThreshold = 600;
+const int voltageThreshold = 2400;
 bool motorRunning = true;
+
 
 // ------------------------- CALIBRATION -------------------------
 const int stepsPerRevolution = 2048;
@@ -132,14 +135,95 @@ void runAllToTarget() {
 void moveLinear(int cm) {
   if (!motorRunning) return;
   int steps = cm * stepsPerCm;
+  Serial.printf("moving %d cm\n", cm);
 
+
+
+  motorFR.setSpeed(MAX_SPEED);
+  motorFL.setSpeed(MAX_SPEED);
+  motorBR.setSpeed(MAX_SPEED);
+  motorBL.setSpeed(MAX_SPEED);
+  
+  motorFR.setAcceleration(TURN_ACCEL);
+  motorFL.setAcceleration(TURN_ACCEL);
+  motorBR.setAcceleration(TURN_ACCEL);
+  motorBL.setAcceleration(TURN_ACCEL);
+
+// non blocking lines, sends command to other process to move that far
   motorFR.move(steps);
   motorFL.move(steps);
   motorBR.move(steps);
   motorBL.move(steps);
 
-  runAllToTarget();
-}
+  int count = 0;
+    // makes function blocking, 
+    // will end loop when moved x cm and return back to main loop
+    while (motorFR.distanceToGo() != 0 || 
+         motorFL.distanceToGo() != 0 ||
+         motorBR.distanceToGo() != 0 || 
+         motorBL.distanceToGo() != 0) {
+
+        motorFR.run();
+        motorFL.run();
+        motorBR.run();
+        motorBL.run();
+
+      // wait for prox sensor above threshold, wait 100ms, and get second good reading
+      if (analogRead(adcPin) > voltageThreshold)
+      {
+        Serial.println("oh?");
+        delay(100);
+        if (analogRead(adcPin) > voltageThreshold)
+        {
+          Serial.println("THATS A CUPPPPP");
+          motorFR.stop();
+          motorFL.stop();
+          motorBR.stop();
+          motorBL.stop();
+          
+          digitalWrite(PUMP_PIN, HIGH);
+          delay(PUMP_DELAY);
+          digitalWrite(PUMP_PIN, LOW);
+
+          delay(2000);
+          
+          // back up to indicate done to set backup dist in cm
+          steps = BACKUP_DIST * stepsPerCm;
+            motorFR.move(steps);
+            motorFL.move(steps);
+            motorBR.move(steps);
+            motorBL.move(steps);
+
+            while (motorFR.distanceToGo() != 0 || 
+                  motorFL.distanceToGo() != 0 ||
+                  motorBR.distanceToGo() != 0 || 
+                  motorBL.distanceToGo() != 0) {
+              motorFR.run();
+              motorFL.run();
+              motorBR.run();
+              motorBL.run();
+            }
+
+          Serial.println("o7");
+
+          // you did good bud o7
+
+          while(1);
+
+          
+        }
+      }
+      if (count % 200)
+      {
+        Serial.println(analogRead(adcPin));
+      }
+      // delay(100);
+      count++;
+    }
+  }
+
+//   runAllToTarget();
+// }
 
 void moveStrafe(float cm) {
   if (!motorRunning) return;
@@ -185,14 +269,15 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   server.begin();
+  Serial.println(analogRead(adcPin));
 }
 
 // ------------------------- LOOP -------------------------
 void loop() {
 
   // Check ADC cutoff
-  int adcValue = analogRead(adcPin);
-  motorRunning = adcValue < voltageThreshold;
+  // int adcValue = analogRead(adcPin);
+  // motorRunning = adcValue < voltageThreshold;
 
   WiFiClient client = server.available();
   if (!client) return;
@@ -201,6 +286,8 @@ void loop() {
   String currentLine = "";
 
   while (client.connected()) {
+    // motorRunning = adcValue < voltageThreshold;
+
     if(millis() - pumpMillis >= PUMP_DELAY) {
       digitalWrite(PUMP_PIN, LOW);
     }
