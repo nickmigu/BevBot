@@ -27,6 +27,7 @@ def capture_frame(cap):
 def preprocess_frame(frame, process_scale=1.0, flip_video=False):
     """
     Preprocess frame: flip and/or resize
+    OPTIMIZED: Faster interpolation for resize
 
     Args:
         frame: Input BGR frame
@@ -48,7 +49,8 @@ def preprocess_frame(frame, process_scale=1.0, flip_video=False):
         height, width = frame.shape[:2]
         new_width = int(width * process_scale)
         new_height = int(height * process_scale)
-        frame = cv2.resize(frame, (new_width, new_height))
+        # OPTIMIZED: Use INTER_AREA for downscaling (faster and better quality than default)
+        frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
 
     return frame
 

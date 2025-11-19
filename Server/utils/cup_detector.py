@@ -3,9 +3,13 @@
 Shared Red Cup Detection Module
 Used by both calibration and tracking scripts
 Improved version with multi-candidate scoring and color verification
+OPTIMIZED: Pre-converted arrays, cached kernel, early rejection
 """
 import cv2
 import numpy as np
+
+# Cache morphological kernel (created once, reused every frame)
+_MORPH_KERNEL = np.ones((3, 3), np.uint8)
 
 
 def verify_color_confidence(frame, hsv, mask, bbox):
@@ -28,7 +32,7 @@ def verify_color_confidence(frame, hsv, mask, bbox):
 
     # Calculate percentage of red pixels in the detected region
     total_pixels = w * h
-    red_pixels = np.count_nonzero(roi_mask)
+    red_pixels = cv2.countNonZero(roi_mask)  # OPTIMIZED: cv2 faster than np
 
     confidence = red_pixels / total_pixels if total_pixels > 0 else 0.0
 
@@ -121,18 +125,19 @@ def detect_red_cup(frame, hsv_ranges, min_confidence=0.60, return_all_candidates
     # Convert to HSV for better color detection
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
+    # OPTIMIZED: Pre-convert HSV ranges to numpy arrays once
     # Red color range - uses dual ranges from config
-    RED_LOWER_1 = hsv_ranges.get('red_lower_1', [0, 100, 100])
-    RED_UPPER_1 = hsv_ranges.get('red_upper_1', [10, 255, 255])
-    RED_LOWER_2 = hsv_ranges.get('red_lower_2', [160, 100, 100])
-    RED_UPPER_2 = hsv_ranges.get('red_upper_2', [180, 255, 255])
+    RED_LOWER_1 = np.array(hsv_ranges.get('red_lower_1', [0, 100, 100]), dtype=np.uint8)
+    RED_UPPER_1 = np.array(hsv_ranges.get('red_upper_1', [10, 255, 255]), dtype=np.uint8)
+    RED_LOWER_2 = np.array(hsv_ranges.get('red_lower_2', [160, 100, 100]), dtype=np.uint8)
+    RED_UPPER_2 = np.array(hsv_ranges.get('red_upper_2', [180, 255, 255]), dtype=np.uint8)
 
-    mask1 = cv2.inRange(hsv, np.array(RED_LOWER_1), np.array(RED_UPPER_1))
-    mask2 = cv2.inRange(hsv, np.array(RED_LOWER_2), np.array(RED_UPPER_2))
+    mask1 = cv2.inRange(hsv, RED_LOWER_1, RED_UPPER_1)
+    mask2 = cv2.inRange(hsv, RED_LOWER_2, RED_UPPER_2)
     mask = mask1 | mask2  # Fast bitwise OR
 
-    # Single morphology operation for speed
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    # OPTIMIZED: Use cached kernel
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, _MORPH_KERNEL)
 
     # Find contours
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -140,34 +145,41 @@ def detect_red_cup(frame, hsv_ranges, min_confidence=0.60, return_all_candidates
     if not contours:
         return False, 0, 0, 0, None, 0.0, []
 
-    # Filter by minimum area and score all candidates
+    # OPTIMIZED: Sort contours by area (largest first) and only process top candidates
+    # This avoids wasting time on small noise contours
+    contours_with_area = [(cv2.contourArea(c), c) for c in contours]
+    contours_with_area.sort(key=lambda x: x[0], reverse=True)
+
+    # Only process top 5 largest contours (cup is likely to be large)
+    max_candidates_to_check = 5
+
     candidates = []
 
-    for contour in contours:
-        area = cv2.contourArea(contour)
+    for area, contour in contours_with_area[:max_candidates_to_check]:
+        # OPTIMIZED: Early rejection - skip small contours
+        if area <= 500:
+            break  # Since sorted by area, all remaining are smaller
 
-        # Filter noise (area > 500 pixels - increased from 200)
-        if area > 500:
-            x, y, w, h = cv2.boundingRect(contour)
+        x, y, w, h = cv2.boundingRect(contour)
 
-            # Verify color confidence
-            color_confidence = verify_color_confidence(frame, hsv, mask, (x, y, w, h))
+        # Verify color confidence
+        color_confidence = verify_color_confidence(frame, hsv, mask, (x, y, w, h))
 
-            # Score this candidate
-            score = score_candidate(contour, frame.shape, color_confidence, area)
+        # Score this candidate
+        score = score_candidate(contour, frame.shape, color_confidence, area)
 
-            # Only keep if score is above threshold
-            if score > 0:
-                cx = x + w // 2
-                cy = y + h // 2
-                candidates.append({
-                    'score': score,
-                    'area': area,
-                    'bbox': (x, y, w, h),
-                    'center': (cx, cy),
-                    'confidence': color_confidence,
-                    'contour': contour
-                })
+        # Only keep if score is above threshold
+        if score > 0:
+            cx = x + w // 2
+            cy = y + h // 2
+            candidates.append({
+                'score': score,
+                'area': area,
+                'bbox': (x, y, w, h),
+                'center': (cx, cy),
+                'confidence': color_confidence,
+                'contour': contour
+            })
 
     if not candidates:
         return False, 0, 0, 0, None, 0.0, []

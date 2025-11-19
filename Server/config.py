@@ -7,6 +7,7 @@ import os
 
 # IP Webcam stream URL
 STREAM_URL = "http://192.168.1.85:8080/video"
+# STREAM_URL = "http://192.168.1.160:8080/video"
 
 # ESP32 microcontroller IP address
 ESP32_IP = "http://192.168.1.200"
@@ -25,14 +26,14 @@ WINDOW_HEIGHT = 480  # Adjust this to make window taller/shorter
 
 # Processing scale (0.0 to 1.0) - lower = faster, higher = more accurate
 # 1.0 = full resolution, 0.5 = half resolution, 0.25 = quarter resolution
-PROCESS_SCALE = 0.2  # Recommended: 0.2-0.4 for good speed/accuracy balance
+PROCESS_SCALE = 1  # Recommended: 0.2-0.4 for good speed/accuracy balance
 
 # Flip video upside down (useful if camera is mounted upside down)
 FLIP_VIDEO = True  # Set to True to rotate video 180 degrees
 
 # Camera field of view (in degrees)
-# CAMERA_FOV = 120  # Typical phone camera horizontal FOV (adjust for your camera)
-CAMERA_FOV = 60 # Nick Phone FOV
+CAMERA_FOV = 120  # Typical phone camera horizontal FOV (adjust for your camera)
+# CAMERA_FOV = 60 # Nick Phone FOV
 # 120 FOV Jacques Phone Ultra Wide
 
 ANGLE_DEADZONE = 2.0  # Angles within ±2° are considered centered
@@ -41,6 +42,7 @@ ANGLE_DEADZONE = 2.0  # Angles within ±2° are considered centered
 SEARCH_SPIN_ANGLE = 5  # Degrees to rotate when searching for cups (positive = right)
 
 STEP_MOVE_DISTANCE = 10  # cm to move forward when cup is centered
+FIN_STEP_MOVE_DISTANCE = 30  # cm to move forward in final approach
 
 # HSV Color range for red cup detection
 # These values are loaded from hsv_config.json (use calibrate_hsv.py to adjust)
@@ -48,11 +50,27 @@ STEP_MOVE_DISTANCE = 10  # cm to move forward when cup is centered
 CONFIG_FILE = "hsv_config.json"
 
 # Default HSV values (fallback if config file doesn't exist)
-DEFAULT_HSV = {
-    "red_lower_1": [0, 100, 100],
-    "red_upper_1": [10, 255, 255],
-    "red_lower_2": [160, 100, 100],
-    "red_upper_2": [180, 255, 255]
+DEFAULT_HSV ={
+  "red_lower_1": [
+    0,
+    195,
+    37
+  ],
+  "red_upper_1": [
+    9,
+    255,
+    203
+  ],
+  "red_lower_2": [
+    160,
+    100,
+    100
+  ],
+  "red_upper_2": [
+    180,
+    255,
+    255
+  ]
 }
 
 def load_hsv_config(config_file=None):

@@ -1,14 +1,24 @@
 import cv2
 from time import time
 
+# Cache scale factors (computed once since window size doesn't change)
+_cached_scales = {}
+
 def prepare_display_frame(process_frame, width, height, window_width, window_height):
     """
     Resize process frame to display size and calculate scale factors
+    OPTIMIZED: Cached scale factors, faster interpolation
     Returns: (display_frame, scale_x, scale_y)
     """
-    display_frame = cv2.resize(process_frame, (window_width, window_height))
-    scale_x = window_width / width
-    scale_y = window_height / height
+    # OPTIMIZED: Use INTER_NEAREST for 2-3x faster resize with minimal quality loss on display
+    display_frame = cv2.resize(process_frame, (window_width, window_height), interpolation=cv2.INTER_NEAREST)
+
+    # OPTIMIZED: Cache scale factors (they never change if window size is constant)
+    cache_key = (width, height, window_width, window_height)
+    if cache_key not in _cached_scales:
+        _cached_scales[cache_key] = (window_width / width, window_height / height)
+
+    scale_x, scale_y = _cached_scales[cache_key]
     return display_frame, scale_x, scale_y
 
 def draw_detection_overlay(display_frame, found, angle, area, bbox, cx, cy, scale_x, scale_y, confidence=0.0):

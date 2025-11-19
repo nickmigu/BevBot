@@ -91,6 +91,7 @@ class CupTracker:
         self.last_detection = None
 
     def update(self):
+        # return
         """
         Update tracking: capture frame, detect cup, calculate movement, send command
 
@@ -160,19 +161,19 @@ class CupTracker:
         cv2.destroyAllWindows()
 
 
-def track_cup_and_move(stream_url=None, process_scale=None, **kwargs):
-    """
-    Simple function interface for single-frame tracking
+# def track_cup_and_move(stream_url=None, process_scale=None, **kwargs):
+#     """
+#     Simple function interface for single-frame tracking
 
-    Args:
-        stream_url: Video stream URL
-        process_scale: Processing scale
-        **kwargs: Additional parameters for CupTracker
+#     Args:
+#         stream_url: Video stream URL
+#         process_scale: Processing scale
+#         **kwargs: Additional parameters for CupTracker
 
-    Returns:
-        dict: Tracking result (same as CupTracker.update())
-    """
-    tracker = CupTracker(stream_url=stream_url, process_scale=process_scale, **kwargs)
-    result = tracker.update()
-    tracker.cleanup()
-    return result
+#     Returns:
+#         dict: Tracking result (same as CupTracker.update())
+#     """
+#     tracker = CupTracker(stream_url=stream_url, process_scale=process_scale, **kwargs)
+#     result = tracker.update()
+#     tracker.cleanup()
+#     return result

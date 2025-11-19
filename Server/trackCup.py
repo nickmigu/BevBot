@@ -5,7 +5,7 @@ All configuration and logic is now in modular components
 import cv2
 import requests
 from time import time
-from config import WINDOW_WIDTH, WINDOW_HEIGHT, SEARCH_SPIN_ANGLE, STEP_MOVE_DISTANCE, ANGLE_DEADZONE
+from config import WINDOW_WIDTH, WINDOW_HEIGHT, SEARCH_SPIN_ANGLE, STEP_MOVE_DISTANCE, ANGLE_DEADZONE, FIN_STEP_MOVE_DISTANCE
 from utils.tracker_core import CupTracker
 from utils.display_util import prepare_display_frame, draw_detection_overlay, update_and_draw_fps
 from utils.capture_util import should_exit
@@ -79,14 +79,21 @@ def main():
         # ===== BEVBOT CONTROL LOGIC =====
         found = result['found']
         angle = result['angle']
+        cy = result['cy']
+        frame_height = result['frame'].shape[0]
 
         if found:
             print("Found CUP")
             # Cup detected - send control commands with error handling
             try:
-                if abs(angle) < ANGLE_DEADZONE:
-                    # Cup is centered - move forward
-                    Controls.move(STEP_MOVE_DISTANCE)
+                print(f"Angle to cup: {angle} degrees")
+                if angle == 0.0:
+                    # Check if cup is in bottom half of screen (close to robot)
+                    if cy > frame_height * 0.3:
+                        Controls.move(FIN_STEP_MOVE_DISTANCE)
+                    else:
+                        # Cup is centered - move forward
+                        Controls.move(STEP_MOVE_DISTANCE)
                 else:
                     # Cup is off-center - rotate to center it
                     Controls.rotate(angle)
