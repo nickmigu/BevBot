@@ -1,21 +1,9 @@
 # -*- coding: utf-8 -*-
 import cv2
 import numpy as np
-import json
-from cup_detector import detect_red_cup
-
-# IP Webcam stream URL
-# STREAM_URL = "http://192.168.1.160:8080/video"
-STREAM_URL = "http://192.168.1.85:8080/video"
-
-# Config file path
-CONFIG_FILE = "hsv_config.json"
-
-# Processing scale for performance (same as tracker)
-PROCESS_SCALE = 0.3
-
-# Flip video upside down (useful if camera is mounted upside down)
-FLIP_VIDEO = False  # Set to True to rotate video 180 degrees
+from utils.cup_detector import detect_red_cup
+from config import STREAM_URL, PROCESS_SCALE, FLIP_VIDEO, CONFIG_FILE, save_hsv_config, DEBUG_MODE, LOCAL_CAMERA_INDEX
+from utils.capture_util import preprocess_frame
 
 class SimpleHSVCalibrator:
     def __init__(self):
@@ -229,8 +217,8 @@ class SimpleHSVCalibrator:
         if config is None:
             return
 
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
+        # Use centralized save function
+        save_hsv_config(config)
 
         # Store config for live detection preview
         self.current_config = config
@@ -335,10 +323,19 @@ class SimpleHSVCalibrator:
 
     def run(self):
         """Main calibration loop"""
-        cap = cv2.VideoCapture(STREAM_URL)
+        # Select camera source based on DEBUG_MODE
+        if DEBUG_MODE:
+            camera_source = LOCAL_CAMERA_INDEX
+            print(f"DEBUG MODE: Using local webcam (device {LOCAL_CAMERA_INDEX})")
+        else:
+            camera_source = STREAM_URL
+            print(f"PRODUCTION MODE: Using network stream ({STREAM_URL})")
+
+        cap = cv2.VideoCapture(camera_source)
 
         if not cap.isOpened():
-            print(f"ERROR: Could not open video stream: {STREAM_URL}")
+            source_name = f"device {LOCAL_CAMERA_INDEX}" if DEBUG_MODE else STREAM_URL
+            print(f"ERROR: Could not open video stream: {source_name}")
             return
 
         print(f"Stream opened at {PROCESS_SCALE*100:.0f}% resolution for better performance\n")
@@ -349,15 +346,8 @@ class SimpleHSVCalibrator:
                 print("Failed to get frame")
                 continue
 
-            # Flip video if needed (camera mounted upside down)
-            if FLIP_VIDEO:
-                frame = cv2.flip(frame, -1)  # -1 flips both horizontally and vertically (180 degree rotation)
-
-            # Downscale for performance (same as tracker)
-            height, width = frame.shape[:2]
-            process_width = int(width * PROCESS_SCALE)
-            process_height = int(height * PROCESS_SCALE)
-            process_frame = cv2.resize(frame, (process_width, process_height))
+            # Preprocess frame using shared utility
+            process_frame = preprocess_frame(frame, PROCESS_SCALE, FLIP_VIDEO)
 
             # Store downscaled frame and HSV for sampling
             self.current_frame = process_frame
