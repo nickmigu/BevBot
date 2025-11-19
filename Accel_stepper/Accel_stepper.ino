@@ -78,7 +78,7 @@ String getValue(String data, String key) {
 
 // -------------------------  TURN TURNER -------------------------
 
-void turnDegrees(float degrees) {
+void turnDegrees(int degrees) {
   motorFR.setMaxSpeed(TURN_SPEED);
   motorFL.setMaxSpeed(TURN_SPEED);
   motorBR.setMaxSpeed(TURN_SPEED);
@@ -128,7 +128,7 @@ void runAllToTarget() {
   }
 }
 
-void moveLinear(float cm) {
+void moveLinear(int cm) {
   if (!motorRunning) return;
   int steps = cm * stepsPerCm;
 
@@ -156,7 +156,7 @@ void moveStrafe(float cm) {
 void setup() {
   Serial.begin(115200);
   pinMode(adcPin, INPUT);
-  pinMode(PUMP_PIN, INPUT);
+  pinMode(PUMP_PIN, OUTPUT);
 
   motorFR.setMaxSpeed(MAX_SPEED);
   motorFL.setMaxSpeed(MAX_SPEED);
@@ -195,83 +195,73 @@ void loop() {
   String currentLine = "";
 
   while (client.connected()) {
+    if(millis() - pumpMillis >= PUMP_DELAY) {
+      digitalWrite(PUMP_PIN, LOW);
+    }
     if (!client.available()) continue;
 
     char c = client.read();
     header += c;
 
-    if (c != '\n') continue;
+    if (c == '\n') {
+      if (currentLine.length() == 0) {
+        int dist = getValue(header, "dist=").toInt();
+        int deg  = getValue(header, "deg=").toInt();
 
-    if (currentLine.length() == 0) {
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-type:text/html");
+        client.println("Connection: close");
+        client.println();
+        client.println("<html><body><h1>Command received</h1></body></html>");
+        client.flush();     // <-- MAKE SURE IT LEAVES
+        delay(20);          // <-- Give time to send before blocking
 
-      // ===== LINEAR =====
-      if (header.indexOf("GET /linear") >= 0) {
-        int dist    = getValue(header, "dist=").toInt();
+        if (header.indexOf("GET /linear") >= 0) {
+          Serial.println("=== LINEAR MOVE ===");
+          Serial.println("Straight " + String(dist) + "cm");
+          moveLinear(dist);
+        }
 
-        float cm = dist;
+        if (header.indexOf("GET /rotate") >= 0) {
+          Serial.println("=== ROTATIONAL MOVE ===");
+          Serial.println("Rotating " + String(deg) + "degrees");
+          turnDegrees(deg);
+        }
 
-        Serial.println("=== LINEAR MOVE ===");
-        Serial.println("Straight " + String(dist) + "cm");
+        if (header.indexOf("GET /pump") >= 0) {
+          Serial.println("=== PUMPer ===");
+          Serial.println("PUMPn for a sec");
 
-        moveLinear(cm);
+          // set high and set current millis, reset elsewhere
+          pumpMillis = millis();
+          digitalWrite(PUMP_PIN, HIGH);
+        } 
+
+        // Linear form
+        client.println("<h2>Linear Move</h2>");
+        client.println("<form action='/linear'>"
+                      "Distance (cm): <input name='dist' type='number'><br><br>"
+                      "<button type='submit'>MOVE</button></form><hr>");
+
+        // Rotation form
+        client.println("<h2>Rotate</h2>");
+        client.println("<form action='/rotate'>"
+                      "Degrees: <input name='deg' type='number'><br><br>"
+                      "<button type='submit'>ROTATE</button></form>");
+
+        // Pump button
+        client.println("<h2>Pump</h2>");
+        client.println("<form action='/pump'>"
+                      "<button type='submit'>PUMP N DUMP</button></form>");
+        client.println("</body></html>");
+        break;
+      } else {
+        currentLine = "";
       }
-
-      if (header.indexOf("GET /rotate") >= 0) {
-        int dist    = getValue(header, "dist=").toInt();
-
-        float cm = dist;
-
-        Serial.println("=== LINEAR MOVE ===");
-        Serial.println("Straight " + String(dist) + "cm");
-
-        turnDegrees(cm);
-      }
-
-      if (header.indexOf("GET /pump") >= 0) {
-        int dist    = getValue(header, "dist=").toInt();
-
-        float cm = dist;
-
-        Serial.println("=== LINEAR MOVE ===");
-        Serial.println("Rotate " + String(dist) + "cm");
-
-        // set high and set current millis, reset elsewhere
-        pumpMillis = millis();
-        digitalWrite(PUMP_PIN, HIGH);
-      }
-
-      if(millis() - pumpMillis >= PUMP_DELAY) {
-        digitalWrite(PUMP_PIN, LOW);
-      }
-
-      // ===== SEND WEBPAGE =====
-      client.println("HTTP/1.1 200 OK");
-      client.println("Content-type:text/html\n");
-
-      client.println("<html><body style='font-family:Arial;text-align:center;'>");
-      client.println("<h1>Mecanum Robot Control</h1><hr>");
-
-      // Linear form
-      client.println("<h2>Linear Move</h2>");
-      client.println("<form action='/linear'>"
-                     "Distance (cm): <input name='dist' type='number'><br><br>"
-                     "<button type='submit'>MOVE</button></form><hr>");
-
-      // Rotation form
-      client.println("<h2>Rotate</h2>");
-      client.println("<form action='/rotate'>"
-                     "Degrees: <input name='deg' type='number'><br><br>"
-                     "<button type='submit'>ROTATE</button></form>");
-
-      // Pump button
-      client.println("<h2>Pump</h2>");
-      client.println("<form action='/pump'>"
-                     "<button type='submit'>PUMP N DUMP</button></form>");
-      client.println("</body></html>");
-      break;
+    } else if (c != '\r') {
+      currentLine += c;
     }
 
-    currentLine = "";
   }
 
   // if client disconnects, continue to handle pump
