@@ -35,8 +35,8 @@ String header;
 
 #define DEFAULT_SPEED 400
 #define MAX_SPEED     500
-#define TURN_SPEED    600    // Speed for turning operations
-#define TURN_ACCEL    2000    // Acceleration for turning operations
+#define TURN_SPEED    300    // Speed for turning operations
+#define TURN_ACCEL    300    // Acceleration for turning operations
 
 #define PUMP_PIN 13
 
@@ -87,6 +87,8 @@ String getValue(String data, String key) {
 // -------------------------  TURN TURNER -------------------------
 
 void turnDegrees(int degrees) {
+  int count = 0;
+
   motorFR.setMaxSpeed(TURN_SPEED);
   motorFL.setMaxSpeed(TURN_SPEED);
   motorBR.setMaxSpeed(TURN_SPEED);
@@ -119,8 +121,63 @@ void turnDegrees(int degrees) {
     motorFL.run();
     motorBR.run();
     motorBL.run();
+
+// wait for prox sensor above threshold, wait 100ms, and get second good reading
+    if (analogRead(adcPin) > voltageThreshold)
+    {
+      Serial.println("oh?");
+      delay(100);
+      if (analogRead(adcPin) > voltageThreshold)
+      {
+        Serial.println("THATS A CUPPPPP");
+        motorFR.stop();
+        motorFL.stop();
+        motorBR.stop();
+        motorBL.stop();
+        
+        digitalWrite(PUMP_PIN, HIGH);
+        delay(PUMP_DELAY);
+        digitalWrite(PUMP_PIN, LOW);
+
+        delay(2000);
+        
+        // back up to indicate done to set backup dist in cm
+        steps = BACKUP_DIST * stepsPerCm;
+          motorFR.move(steps);
+          motorFL.move(steps);
+          motorBR.move(steps);
+          motorBL.move(steps);
+
+          while (motorFR.distanceToGo() != 0 || 
+                motorFL.distanceToGo() != 0 ||
+                motorBR.distanceToGo() != 0 || 
+                motorBL.distanceToGo() != 0) {
+            motorFR.run();
+            motorFL.run();
+            motorBR.run();
+            motorBL.run();
+          }
+
+        Serial.println("o7");
+
+        delay(5000);
+
+        // you did good bud o7
+
+        return;
+
+        
+      }
+    }
+    if (count % 200)
+    {
+      Serial.println(analogRead(adcPin));
+    }
+    // delay(100);
+    count++;
   }
 }
+
 
 // ------------------------- MOVEMENT HELPERS -------------------------
 void runAllToTarget() {
@@ -143,7 +200,7 @@ void moveLinear(int cm) {
 
 
 
-  motorFR.setSpeed(MAX_SPEED);
+  motorFR.setSpeed(MAX_SPEED);f
   motorFL.setSpeed(MAX_SPEED);
   motorBR.setSpeed(MAX_SPEED);
   motorBL.setSpeed(MAX_SPEED);
